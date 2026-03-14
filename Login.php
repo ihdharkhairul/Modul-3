@@ -1,15 +1,6 @@
 <?php
 session_start();
 
-// Jika sudah login, langsung redirect sesuai role
-if (isset($_SESSION['user_role'])) {
-    switch ($_SESSION['user_role']) {
-        case 'admin':   header('Location: dashboard.php'); exit;
-        case 'officer': header('Location: officer_dashboard.php'); exit;
-        default:        header('Location: citizen_dashboard.php'); exit;
-    }
-}
-
 $errors = [];
 $email  = '';
 
