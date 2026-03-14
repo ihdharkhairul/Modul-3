@@ -1,8 +1,17 @@
 <?php
 session_start();
 
+// Jika sudah login, langsung redirect sesuai role
+if (isset($_SESSION['user_role'])) {
+    switch ($_SESSION['user_role']) {
+        case 'admin':   header('Location: dashboard.php'); exit;
+        case 'officer': header('Location: officer_dashboard.php'); exit;
+        default:        header('Location: citizen_dashboard.php'); exit;
+    }
+}
+
 $errors = [];
-$email = '';
+$email  = '';
 
 // Daftar akun valid (simulasi — ganti dengan query database di produksi)
 $valid_accounts = [
@@ -30,28 +39,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // ── Cek Kredensial ───────────────────────────────────────
     if (empty($errors)) {
-        if (isset($valid_accounts[$email])) {
+        if (isset($valid_accounts[$email]) && $password === $valid_accounts[$email]['password']) {
             $account = $valid_accounts[$email];
 
-            // Gunakan password_verify() jika pakai password_hash() di DB
-            if ($password === $account['password']) {
-                $_SESSION['user_email'] = $email;
-                $_SESSION['user_role']  = $account['role'];
+            // Simpan session
+            $_SESSION['user_email'] = $email;
+            $_SESSION['user_role']  = $account['role'];
+            $_SESSION['user_name']  = $account['role'] === 'admin' ? 'Ghufron' : ucfirst($account['role']);
 
-                // Redirect sesuai role
-                switch ($account['role']) {
-                    case 'admin':
-                        header('Location: ../Admin/dashboard.php');
-                        exit;
-                    case 'officer':
-                        header('Location: ../OfficerDashboard/index.php');
-                        exit;
-                    default:
-                        header('Location: ../Citizen_Dashboard/index.php');
-                        exit;
-                }
-            } else {
-                $errors['general'] = 'Email atau password salah.';
+            // Redirect sesuai role
+            switch ($account['role']) {
+                case 'admin':
+                    header('Location: dashboard.php');
+                    exit;
+                case 'officer':
+                    header('Location: officer_dashboard.php');
+                    exit;
+                default:
+                    header('Location: citizen_dashboard.php');
+                    exit;
             }
         } else {
             $errors['general'] = 'Email atau password salah.';
@@ -62,14 +68,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // Helper: tampilkan pesan error
 function err(string $key, array $errors): string {
     if (isset($errors[$key])) {
-        return '<p class="text-red-500 text-xs mt-1">'
-             . htmlspecialchars($errors[$key])
-             . '</p>';
+        return '<p class="text-red-500 text-xs mt-1">' . htmlspecialchars($errors[$key]) . '</p>';
     }
     return '';
 }
 
-// Highlight border merah jika error
 function inputClass(string $key, array $errors): string {
     $base = 'w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 '
           . 'focus:ring-teal-500 focus:border-transparent transition-all text-sm';
@@ -98,7 +101,6 @@ function inputClass(string $key, array $errors): string {
     }
     .animate-fade-in { animation: fadeInUp 0.6s ease-out forwards; }
 
-    /* Shake animation untuk error */
     @keyframes shake {
       0%, 100% { transform: translateX(0); }
       20%       { transform: translateX(-6px); }
@@ -136,6 +138,14 @@ function inputClass(string $key, array $errors): string {
         <p class="text-gray-500 mt-1 text-sm">Masuk ke akun GaiaCity Anda</p>
       </div>
 
+      <!-- Demo credentials hint -->
+      <div class="mb-4 p-3 bg-teal-50 border border-teal-200 rounded-lg text-teal-700 text-xs space-y-0.5">
+        <p class="font-semibold mb-1"><i class="fa-solid fa-circle-info mr-1"></i>Demo Akun:</p>
+        <p>Admin &nbsp;&nbsp;: admin@gmail.com / admin123</p>
+        <p>Officer : officer@gmail.com / officer123</p>
+        <p>User &nbsp;&nbsp;&nbsp;: user@gmail.com / user123</p>
+      </div>
+
       <!-- Error umum (kredensial salah) -->
       <?php if (!empty($errors['general'])): ?>
         <div class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700 text-sm">
@@ -156,6 +166,7 @@ function inputClass(string $key, array $errors): string {
             value="<?= htmlspecialchars($email) ?>"
             class="<?= inputClass('email', $errors) ?>"
             placeholder="email@example.com"
+            autocomplete="email"
           />
           <?= err('email', $errors) ?>
         </div>
@@ -170,8 +181,8 @@ function inputClass(string $key, array $errors): string {
               type="password"
               class="<?= inputClass('password', $errors) ?> pr-10"
               placeholder="••••••••"
+              autocomplete="current-password"
             />
-            <!-- Toggle show/hide password -->
             <button
               type="button"
               onclick="togglePassword()"
@@ -205,7 +216,6 @@ function inputClass(string $key, array $errors): string {
       </form>
     </div>
 
-    <!-- Back to home -->
     <div class="text-center mt-6">
       <a href="index.php" class="text-white/70 hover:text-white text-sm transition-colors">
         &larr; Kembali ke Beranda
@@ -213,15 +223,13 @@ function inputClass(string $key, array $errors): string {
     </div>
   </div>
 
-  <!-- ── JavaScript: Validasi Client-Side ───────────────────────── -->
   <script>
-    const form        = document.getElementById('loginForm');
-    const emailInput  = document.getElementById('email');
-    const passInput   = document.getElementById('password');
-    const submitBtn   = document.getElementById('submitBtn');
-    const card        = document.getElementById('loginCard');
+    const form       = document.getElementById('loginForm');
+    const emailInput = document.getElementById('email');
+    const passInput  = document.getElementById('password');
+    const submitBtn  = document.getElementById('submitBtn');
+    const card       = document.getElementById('loginCard');
 
-    // ── Helper: tampilkan / hapus error inline ───────────────────
     function showError(input, message) {
       clearError(input);
       input.classList.add('border-red-400');
@@ -238,56 +246,34 @@ function inputClass(string $key, array $errors): string {
       input.closest('div').querySelectorAll('.client-error').forEach(el => el.remove());
     }
 
-    // ── Validasi per-field secara real-time ─────────────────────
     emailInput.addEventListener('blur', () => {
       const val = emailInput.value.trim();
-      if (!val) {
-        showError(emailInput, 'Email wajib diisi.');
-      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) {
-        showError(emailInput, 'Format email tidak valid.');
-      } else {
-        clearError(emailInput);
-      }
+      if (!val) showError(emailInput, 'Email wajib diisi.');
+      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) showError(emailInput, 'Format email tidak valid.');
+      else clearError(emailInput);
     });
 
     passInput.addEventListener('blur', () => {
       const val = passInput.value;
-      if (!val) {
-        showError(passInput, 'Password wajib diisi.');
-      } else if (val.length < 6) {
-        showError(passInput, 'Password minimal 6 karakter.');
-      } else {
-        clearError(passInput);
-      }
+      if (!val) showError(passInput, 'Password wajib diisi.');
+      else if (val.length < 6) showError(passInput, 'Password minimal 6 karakter.');
+      else clearError(passInput);
     });
 
-    // Bersihkan error saat user mengetik
     [emailInput, passInput].forEach(input => {
       input.addEventListener('input', () => clearError(input));
     });
 
-    // ── Validasi saat submit ─────────────────────────────────────
     form.addEventListener('submit', function (e) {
       let valid = true;
-
       const email = emailInput.value.trim();
       const pass  = passInput.value;
 
-      if (!email) {
-        showError(emailInput, 'Email wajib diisi.');
-        valid = false;
-      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        showError(emailInput, 'Format email tidak valid.');
-        valid = false;
-      }
+      if (!email) { showError(emailInput, 'Email wajib diisi.'); valid = false; }
+      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showError(emailInput, 'Format email tidak valid.'); valid = false; }
 
-      if (!pass) {
-        showError(passInput, 'Password wajib diisi.');
-        valid = false;
-      } else if (pass.length < 6) {
-        showError(passInput, 'Password minimal 6 karakter.');
-        valid = false;
-      }
+      if (!pass) { showError(passInput, 'Password wajib diisi.'); valid = false; }
+      else if (pass.length < 6) { showError(passInput, 'Password minimal 6 karakter.'); valid = false; }
 
       if (!valid) {
         e.preventDefault();
@@ -296,12 +282,10 @@ function inputClass(string $key, array $errors): string {
         return;
       }
 
-      // Loading state
       submitBtn.disabled = true;
       submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Memproses...';
     });
 
-    // ── Toggle Password Visibility ───────────────────────────────
     function togglePassword() {
       const isPassword = passInput.type === 'password';
       passInput.type = isPassword ? 'text' : 'password';
